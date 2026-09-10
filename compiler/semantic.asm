@@ -1,63 +1,61 @@
-global semantic_analyze
 section .data
-    msg_semantic_err db "Semantic Error: Invalid argument or type definition", 10
+    err_mutation db "Semantic Error: Cannot modify a constant", 10, 0
+    err_mut_len  equ $ - err_mutation
+
+section .bss
+    symbol_table resb 1024
 
 section .text
-semantic_analyze:
-    ; rsi points to the source string buffer after the keyword
-    xor rcx, rcx
+    global run_semantic_pass
 
-sem_loop:
-    mov al, byte [rsi + rcx]
-    test al, al
-    jz sem_success
+run_semantic_pass:
+    push rbp
+    mov rbp, rsp
+    push rbx
+    push r12
+
+    xor r12, r12
+
+.semantic_loop:
+    mov al, byte [token_stream + r12]
+    cmp al, 0
+    je .semantic_success
+
+    cmp al, 2
+    je .check_constant_mutation
+
+    inc r12
+    jmp .semantic_loop
+
+.check_constant_mutation:
+    inc r12
+    mov al, byte [token_stream + r12]
+    cmp al, 99
+    jne .semantic_error
     
-    ; Ensure no empty argument names before colon
-    cmp al, ':'
-    je check_empty_label
-    
-    ; Ensure no empty type values after colon
-    cmp al, ','
-    je check_empty_type
-    cmp al, ')'
-    je sem_success
-    
-    inc rcx
-    jmp sem_loop
+    inc r12
+    mov al, byte [token_stream + r12]
+    cmp al, 61
+    jne .semantic_loop
 
-check_empty_label:
-    ; If the character immediately before ':' is '(' or ',' or space, it's an empty label
-    dec rcx
-    mov al, byte [rsi + rcx]
-    cmp al, '('
-    je sem_err
-    cmp al, ','
-    je sem_err
-    cmp al, ' '
-    je sem_err
-    inc rcx
-    inc rcx
-    jmp sem_loop
-
-check_empty_type:
-    ; If the character immediately before ',' is ':', it's an empty type
-    dec rcx
-    mov al, byte [rsi + rcx]
-    cmp al, ':'
-    je sem_err
-    inc rcx
-    inc rcx
-    jmp sem_loop
-
-sem_success:
-    ret
-
-sem_err:
     mov rax, 1
-    mov rdi, 1
-    mov rsi, msg_semantic_err
-    mov rdx, 51
+    mov rdi, 2
+    mov rsi, err_mutation
+    mov rdx, err_mut_len
     syscall
+
     mov rax, 60
     mov rdi, 1
     syscall
+
+.semantic_error:
+    pop r12
+    pop rbx
+    pop rbp
+    ret
+
+.semantic_success:
+    pop r12
+    pop rbx
+    pop rbp
+    ret
